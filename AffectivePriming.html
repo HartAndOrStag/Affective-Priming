@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Affective Priming</title>
+    <script src="https://unpkg.com/jspsych@8.2.1"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-html-keyboard-response@2.1.0"></script>
+    <link href="https://unpkg.com/jspsych@8.2.1/css/jspsych.css" rel="stylesheet" type="text/css" />
+  </head>
+  <body></body>
+  <script>
+
+// initialize jsPsych
+const jsPsych = initJsPsych({
+      on_finish: function() {
+        jsPsych.data.displayData();
+      }
+    });
+
+// define number of trials as a multiple of 3
+const numTrials = 72;
+
+// define words in each category
+const words = {
+  neutral: [
+    'tree', 'cloud', 'chair', 'table', 'window',
+    'door', 'lamp', 'book', 'pen', 'pencil',
+    'computer', 'car', 'house', 'bridge', 'river',
+    'mountain', 'rock', 'phone', 'cup', 'clock'
+  ],
+  good: [
+    'joy', 'love', 'kind', 'happy', 'peace',
+    'delight', 'bliss', 'grace', 'cheer', 'optimism',
+    'radiance', 'serenity', 'exuberance', 'inspiration', 'compassion',
+    'courage', 'admiration', 'friendship', 'hope', 'thankfulness'
+  ],
+  bad: [
+    'sadness', 'hate', 'cruel', 'sorrow', 'anger',
+    'misery', 'grief', 'gloom', 'despair', 'fear',
+    'envy', 'loneliness', 'regret', 'bitterness', 'dismay',
+    'dejection', 'disgust', 'resentment', 'anxiety', 'melancholy'
+  ]
+};
+
+// initialize timeline
+let timeline = [];
+
+// define instructions for affective priming task
+const instructions = {
+  type: jsPsychHtmlKeyboardResponse,
+  stimulus: `
+    <p>Welcome to the Affective Priming task.</p>
+    <p>You will see a fixation cross (+) in the center of your screen, then a target word will appear.</p>
+    <p>Your task is to categorize the target word as <strong>good</strong> (press "a") or <strong>bad</strong> (press "l").</p>
+    <p>Press any key to begin.</p>`,
+};
+
+// define fixation cross in center of screen
+const fixation = {
+  type: jsPsychHtmlKeyboardResponse,
+  stimulus: '<div style="font-size:32px;">+</div>',
+  choices: "NO_KEYS",
+  trial_duration: 500
+};
+
+// define primer word flashed to user at a speed which is considered subliminal
+const primer = {
+  type: jsPsychHtmlKeyboardResponse,
+  stimulus: jsPsych.timelineVariable('primer'),
+  choices: "NO_KEYS",
+  trial_duration: 33,
+};
+
+// define target word that user must categorize as good or bad
+const target = {
+  type: jsPsychHtmlKeyboardResponse,
+  stimulus: jsPsych.timelineVariable('target'),
+  choices: ['a', 'l'],
+  trial_duration: 1000,
+  data: {
+    primerType: jsPsych.timelineVariable('primerType'),
+    targetType: jsPsych.timelineVariable('targetType')
+  },
+  on_finish: function(data) {
+    data.correct = (data.targetType === 'good' && data.response === 'a') ||
+                   (data.targetType === 'bad' && data.response === 'l');
+    data.missed = data.response === null;
+  }
+};
+
+// set up trials for neutral, congruent, and incongruent primer-target types in equal amounts
+for (let i = 0; i < numTrials / 3; ++i) {
+
+  // randomly choose either good or bad target type
+  let targetType = jsPsych.randomization.sampleWithReplacement(['good', 'bad'], 1)[0];
+
+  // push a fixation cross, random neutral primer, and random target to timeline
+  timeline.push({
+    timeline: [fixation, primer, target],
+    timeline_variables: [{
+        primer: `<div style="font-size:32px;">${jsPsych.randomization.sampleWithoutReplacement(words.neutral, 1)[0]}</div>`,
+        target: `<div style="font-size:32px;">${jsPsych.randomization.sampleWithReplacement(words[targetType], 1)[0]}</div>`,
+        primerType: 'neutral',
+        targetType: targetType
+    }]
+  });
+
+  // randomly choose either good or bad target type
+  targetType = jsPsych.randomization.sampleWithReplacement(['good', 'bad'], 1)[0];
+
+  // push a fixation cross, random primer of same type as target, and random target to timeline
+  timeline.push({
+    timeline: [fixation, primer, target],
+    timeline_variables: [{ 
+        primer: `<div style="font-size:32px;">${jsPsych.randomization.sampleWithReplacement(words[targetType], 1)[0]}</div>`,
+        target: `<div style="font-size:32px;">${jsPsych.randomization.sampleWithReplacement(words[targetType], 1)[0]}</div>`,
+        primerType: 'congruent', 
+        targetType: targetType 
+    }]
+  });
+
+  // randomly choose either good or bad target type
+  targetType = jsPsych.randomization.sampleWithReplacement(['good', 'bad'], 1)[0];
+
+  // push a fixation cross, random primer of different type as target, and random target to timeline
+  timeline.push({
+    timeline: [fixation, primer, target],
+    timeline_variables: [{ 
+        primer: `<div style="font-size:32px;">${jsPsych.randomization.sampleWithReplacement(words[targetType === 'good' ? 'bad' : 'good'], 1)[0]}</div>`,
+        target:  `<div style="font-size:32px;">${jsPsych.randomization.sampleWithReplacement(words[targetType], 1)[0]}</div>`,
+        primerType: 'incongruent', 
+        targetType: targetType 
+    }]
+  });
+}
+
+// shuffle timeline so that each trial comes in a random order
+timeline = jsPsych.randomization.shuffle(timeline);
+
+// define end-screen summary
+const summary = {
+  type: jsPsychHtmlKeyboardResponse,
+  stimulus: function() {
+
+    // calculate average response time of a given primer-target type
+    const avgResponseTime = (primerType) => {
+      const rtData = jsPsych.data.get().filter({ primerType }).select('rt').values;
+      return rtData.length ? (rtData.reduce((total, curr) => total + curr, 0) / rtData.length).toFixed(2) : 'N/A';
+    };
+
+    // calculate average correct of a given primer-target type
+    const avgCorrect = (primerType) => {
+      const correctData = jsPsych.data.get().filter({ primerType }).select('correct').values;
+      return correctData.length ? ((correctData.filter(isCorrect => isCorrect).length / correctData.length) * 100).toFixed(2) + '%' : 'N/A';
+    };
+
+    // display average response time and average correct for each primer-target type
+    return `
+      <p>Task Complete!</p>
+      <p><strong>Average Response Times:</strong></p>
+      <p>Congruent: ${avgResponseTime('congruent')} ms</p>
+      <p>Neutral: ${avgResponseTime('neutral')} ms</p>
+      <p>Incongruent: ${avgResponseTime('incongruent')} ms</p><br>
+      <p><strong>Accuracy:</strong></p>
+      <p>Congruent: ${avgCorrect('congruent')}</p>
+      <p>Neutral: ${avgCorrect('neutral')}</p>
+      <p>Incongruent: ${avgCorrect('incongruent')}</p><br>
+      <p>Press any key to exit.</p>`;
+  },
+};
+
+// run timeline with instructions in front and summary in back
+jsPsych.run([instructions, ...timeline, summary]);
+
+  </script>
+</html>
